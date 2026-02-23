@@ -1,7 +1,8 @@
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
+#import <substrate.h>
 
-// --- Game Engine Hooks (Fixes the Red X) ---
+// --- Game Engine Hooks ---
 extern "C" void SpawnItem(void *itemName, int quantity, float x, float y, float z, int colorHue, int colorSat);
 extern "C" void* il2cpp_string_new(const char *str);
 
@@ -13,10 +14,22 @@ extern "C" void* il2cpp_string_new(const char *str);
 
 @implementation MilesTMCController
 
+// --- MODERN KEYWINDOW FIX (Fixes the build error) ---
+- (UIWindow *)findActiveWindow {
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                return scene.windows.firstObject;
+            }
+        }
+    }
+    return [UIApplication sharedApplication].keyWindow;
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // 1. Create the TMC Open Button (Top Left)
+    // 1. Setup the TMC Button (Top Left)
     self.tmcButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.tmcButton.frame = CGRectMake(20, 50, 80, 45);
     self.tmcButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.5 blue:1.0 alpha:0.9];
@@ -26,7 +39,7 @@ extern "C" void* il2cpp_string_new(const char *str);
     self.tmcButton.layer.borderColor = [UIColor whiteColor].CGColor;
     [self.tmcButton addTarget:self action:@selector(showMenu) forControlEvents:UIControlEventTouchUpInside];
     
-    // 2. Create the X Close Button (Top Right)
+    // 2. Setup the X Close Button (Top Right)
     CGFloat sw = [UIScreen mainScreen].bounds.size.width;
     self.closeButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.closeButton.frame = CGRectMake(sw - 70, 50, 50, 50);
@@ -36,12 +49,11 @@ extern "C" void* il2cpp_string_new(const char *str);
     self.closeButton.hidden = YES;
     [self.closeButton addTarget:self action:@selector(hideMenu) forControlEvents:UIControlEventTouchUpInside];
 
-    // Add buttons to the window
-    UIWindow *win = [UIApplication sharedApplication].keyWindow;
-    [win addSubview:self.tmcButton];
-    [win addSubview:self.closeButton];
+    // Add buttons to the window safely
+    [[self findActiveWindow] addSubview:self.tmcButton];
+    [[self findActiveWindow] addSubview:self.closeButton];
 
-    // 3. Setup the Neon HTML Menu
+    // 3. Setup the WebView (The Menu)
     WKUserContentController *ucc = [[WKUserContentController alloc] init];
     [ucc addScriptMessageHandler:self name:@"milesBridge"];
     WKWebViewConfiguration *cfg = [[WKWebViewConfiguration alloc] init];
@@ -53,7 +65,7 @@ extern "C" void* il2cpp_string_new(const char *str);
     self.webView.backgroundColor = [UIColor clearColor];
     [self.view addSubview:self.webView];
 
-    // THE FULL HTML DESIGN
+    // --- YOUR HTML DESIGN ---
     NSString *html = @"<!DOCTYPE html><html><head><style>"
     "body { margin:0; display:flex; justify-content:center; align-items:center; background:rgba(0,0,0,0.7); font-family:sans-serif; height:100vh; }"
     ".panel { background:rgba(40,0,60,0.95); padding:20px; border-radius:20px; width:320px; color:white; text-align:center; border:2px solid #1e90ff; box-shadow:0 0 20px #1e90ff; }"
@@ -88,7 +100,6 @@ extern "C" void* il2cpp_string_new(const char *str);
     NSString *name = data[@"item"];
     NSString *loc = data[@"loc"];
     
-    // Formatter: "Alpha Blade" -> "item_alpha_blade"
     NSString *fmt = [NSString stringWithFormat:@"item_%@", [[name lowercaseString] stringByReplacingOccurrencesOfString:@" " withString:@"_"]];
     
     float x=0, y=2.5, z=0;
@@ -100,14 +111,13 @@ extern "C" void* il2cpp_string_new(const char *str);
 @end
 
 // --- Injection Hook ---
-#import <substrate.h>
 %hook UnityAppController
 - (void)applicationDidBecomeActive:(id)arg {
     %orig;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         MilesTMCController *menu = [[MilesTMCController alloc] init];
-        UIWindow *win = [UIApplication sharedApplication].keyWindow;
+        UIWindow *win = [UIApplication sharedApplication].windows.firstObject;
         [win.rootViewController addChildViewController:menu];
         [win.rootViewController.view addSubview:menu.view];
     });
