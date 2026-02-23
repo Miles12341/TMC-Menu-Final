@@ -10,13 +10,12 @@ extern "C" void* il2cpp_string_new(const char *str);
 @property (nonatomic, strong) WKWebView *webView;
 @property (nonatomic, strong) UIButton *tmcButton;
 @property (nonatomic, strong) UIButton *closeButton;
-@property (nonatomic, strong) NSString *htmlContent;
 @end
 
 @implementation MilesTMCController
 
 // --- MODERN WINDOW FINDER (Stops iPhone 13-16 Crashes) ---
-- (UIWindow *)findActiveWindow {
+- (UIWindow *)getSafeWindow {
     if (@available(iOS 13.0, *)) {
         for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
             if (scene.activationState == UISceneActivationStateForegroundActive) {
@@ -32,7 +31,7 @@ extern "C" void* il2cpp_string_new(const char *str);
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // 1. Setup the TMC Button (Positioned for Notch/Island)
+    // 1. TMC Button (Lowered for iPhone 13-16 Notch/Island)
     self.tmcButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.tmcButton.frame = CGRectMake(50, 80, 80, 45); 
     self.tmcButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.5 blue:1.0 alpha:0.9];
@@ -43,7 +42,7 @@ extern "C" void* il2cpp_string_new(const char *str);
     self.tmcButton.layer.borderColor = [UIColor whiteColor].CGColor;
     [self.tmcButton addTarget:self action:@selector(showMenu) forControlEvents:UIControlEventTouchUpInside];
     
-    // 2. Setup the X Close Button
+    // 2. X Close Button (Top Right)
     CGFloat sw = [UIScreen mainScreen].bounds.size.width;
     self.closeButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.closeButton.frame = CGRectMake(sw - 80, 80, 50, 50);
@@ -54,12 +53,10 @@ extern "C" void* il2cpp_string_new(const char *str);
     [self.closeButton addTarget:self action:@selector(hideMenu) forControlEvents:UIControlEventTouchUpInside];
 
     // Add buttons to the active window safely
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[self findActiveWindow] addSubview:self.tmcButton];
-        [[self findActiveWindow] addSubview:self.closeButton];
-    });
+    [[self getSafeWindow] addSubview:self.tmcButton];
+    [[self getSafeWindow] addSubview:self.closeButton];
 
-    // 3. Prepare the Menu (But don't load HTML yet to save RAM)
+    // 3. Setup the Menu WebView
     WKUserContentController *ucc = [[WKUserContentController alloc] init];
     [ucc addScriptMessageHandler:self name:@"milesBridge"];
     WKWebViewConfiguration *cfg = [[WKWebViewConfiguration alloc] init];
@@ -71,12 +68,13 @@ extern "C" void* il2cpp_string_new(const char *str);
     self.webView.backgroundColor = [UIColor clearColor];
     [self.view addSubview:self.webView];
 
-    self.htmlContent = @"<!DOCTYPE html><html><head><style>"
-    "body { margin:0; display:flex; justify-content:center; align-items:center; background:rgba(30,0,50,0.9); font-family:sans-serif; height:100vh; }"
-    ".panel { background:rgba(40,0,60,0.98); padding:20px; border-radius:20px; width:330px; color:white; text-align:center; border:2px solid #1e90ff; box-shadow:0 0 20px #1e90ff; }"
+    // FULL FISHING UPDATE HTML
+    NSString *html = @"<!DOCTYPE html><html><head><style>"
+    "body { margin:0; display:flex; justify-content:center; align-items:center; background:rgba(35,0,55,0.95); font-family:sans-serif; height:100vh; }"
+    ".panel { border:2px solid #1e90ff; padding:20px; border-radius:20px; text-align:center; color:white; width:330px; box-shadow:0 0 20px #1e90ff; }"
     ".tab { background:#1e90ff; border:none; color:white; padding:7px; margin:2px; border-radius:8px; cursor:pointer; font-size:12px; }"
     "select, input { width:90%; padding:10px; margin:8px 0; border-radius:8px; border:none; background:#222; color:white; }"
-    ".res { max-height:80px; overflow-y:auto; background:rgba(0,0,0,0.3); margin-bottom:10px; }"
+    ".res { max-height:90px; overflow-y:auto; background:rgba(0,0,0,0.3); margin-bottom:10px; }"
     ".item { padding:8px; cursor:pointer; border-bottom:1px solid #444; font-size:14px; }"
     ".spawn { background:#1e90ff; border:none; width:100%; padding:15px; border-radius:12px; color:white; font-weight:bold; cursor:pointer; }"
     "</style></head><body><div class='panel'><h3>Miles TMC Fishing</h3>"
@@ -93,14 +91,11 @@ extern "C" void* il2cpp_string_new(const char *str);
     "d.onclick=()=>{sel=i; document.getElementById('search').value=i; r.innerHTML='';}; r.appendChild(d); }); }"
     "function doSpawn(){ if(!sel)return; window.webkit.messageHandlers.milesBridge.postMessage({item:sel, loc:document.getElementById('loc').value}); }"
     "setCat('Fishing');</script></body></html>";
+
+    [self.webView loadHTMLString:html baseURL:nil];
 }
 
-- (void)showMenu { 
-    if (!self.webView.URL) { [self.webView loadHTMLString:self.htmlContent baseURL:nil]; }
-    self.webView.hidden = NO; 
-    self.closeButton.hidden = NO; 
-}
-
+- (void)showMenu { self.webView.hidden = NO; self.closeButton.hidden = NO; }
 - (void)hideMenu { self.webView.hidden = YES; self.closeButton.hidden = YES; }
 
 - (void)userContentController:(id)ucc didReceiveScriptMessage:(WKScriptMessage *)msg {
@@ -119,17 +114,20 @@ extern "C" void* il2cpp_string_new(const char *str);
 }
 @end
 
-// --- THE CRASH PREVENTION HOOK (Wait 5 Seconds) ---
+// --- CRASH BYPASS HOOK (7-Second Stealth Delay) ---
 %hook UnityAppController
 - (void)applicationDidBecomeActive:(id)arg {
     %orig;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // WAIT 7 SECONDS: Lets all security checks pass before modding
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(7.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             MilesTMCController *menu = [[MilesTMCController alloc] init];
             UIWindow *win = [UIApplication sharedApplication].windows.firstObject;
-            [win.rootViewController addChildViewController:menu];
-            [win.rootViewController.view addSubview:menu.view];
+            if (win) {
+                [win.rootViewController addChildViewController:menu];
+                [win.rootViewController.view addSubview:menu.view];
+            }
         });
     });
 }
