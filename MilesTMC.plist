@@ -1,1 +1,9 @@
-{ Filter = { Bundles = ( "com.animalcompany.game" ); }; }
+{
+    Filter = {
+        Bundles = (
+            "com.WoosterGames.AnimalCompanyCompanion",
+            "com.animalcompany.companion",
+            "com.animalcompany.game"
+        );
+    };
+}
