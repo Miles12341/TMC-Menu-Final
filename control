@@ -1,0 +1,8 @@
+Package: com.miles.tmc
+Name: Miles TMC Menu
+Depends: mobilesubstrate
+Version: 1.0
+Architecture: iphoneos-arm
+Description: Animal Company Mod Menu
+Maintainer: Miles
+Author: Miles
