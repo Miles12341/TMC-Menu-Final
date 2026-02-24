@@ -1,9 +1,7 @@
 {
     Filter = {
         Bundles = (
-            "com.WoosterGames.AnimalCompanyCompanion",
-            "com.animalcompany.companion",
-            "com.animalcompany.game"
+            "com.apple.UIKit"
         );
     };
 }
